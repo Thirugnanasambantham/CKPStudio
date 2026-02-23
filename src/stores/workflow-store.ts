@@ -145,6 +145,9 @@ const initialEdges: Edge[] = [
   { id: "e2-3", source: "2", target: "3", type: "smoothstep" },
 ]
 
+/** Id of the special "back to workflow" node used in drill-down view. */
+export const DRILL_DOWN_BACK_NODE_ID = "drill-down-back"
+
 interface WorkflowState {
   nodes: Node[]
   edges: Edge[]
@@ -152,11 +155,14 @@ interface WorkflowState {
   rawCKP: CkpJson | null
   /** Parent node id -> expanded (true) or collapsed (false). Undefined = expanded. */
   expandedNodes: Record<string, boolean>
+  /** When set, canvas shows only this workflow node and its substeps (drill-down view). */
+  drillDownNodeId: string | null
 
   setNodes: (nodes: Node[] | ((prev: Node[]) => Node[])) => void
   setEdges: (edges: Edge[] | ((prev: Edge[]) => Edge[])) => void
   setSelectedNodeId: (id: string | null) => void
   setExpanded: (nodeId: string, expanded: boolean) => void
+  setDrillDownNodeId: (id: string | null) => void
 
   loadWorkflow: (ckp: CkpJson) => void
   /** Update rawCKP in place (immutable update), then optionally rebuild a parent subtree. */
@@ -195,6 +201,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   selectedNodeId: null,
   rawCKP: null,
   expandedNodes: {},
+  drillDownNodeId: null,
 
   setNodes: (nodesOrUpdater) =>
     set((state) => ({
@@ -207,6 +214,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     })),
 
   setSelectedNodeId: (id) => set({ selectedNodeId: id }),
+
+  setDrillDownNodeId: (id) => set({ drillDownNodeId: id }),
 
   setExpanded: (nodeId, expanded) => {
     set((s) => ({

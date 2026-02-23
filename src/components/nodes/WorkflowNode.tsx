@@ -1,6 +1,6 @@
 import { memo } from "react"
 import { Handle, type NodeProps, Position } from "reactflow"
-import { ChevronDown, ChevronRight, Plus } from "lucide-react"
+import { ChevronDown, ChevronRight, Plus, Focus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useWorkflowStore } from "@/stores/workflow-store"
 
@@ -27,6 +27,7 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps<WorkflowNodeDat
   const expandedNodes = useWorkflowStore((s) => s.expandedNodes)
   const setExpanded = useWorkflowStore((s) => s.setExpanded)
   const setSelectedNodeId = useWorkflowStore((s) => s.setSelectedNodeId)
+  const setDrillDownNodeId = useWorkflowStore((s) => s.setDrillDownNodeId)
   const addStep = useWorkflowStore((s) => s.addStep)
   const rawCKP = useWorkflowStore((s) => s.rawCKP)
 
@@ -46,6 +47,17 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps<WorkflowNodeDat
     if (canAddStep) addStep(id)
   }
 
+  const onFocusNode = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setExpanded(id, true)
+    setDrillDownNodeId(id)
+  }
+
+  const onDoubleClick = () => {
+    setExpanded(id, true)
+    setDrillDownNodeId(id)
+  }
+
   const borderCls = TYPE_COLORS[nodeType] ?? TYPE_COLORS.default
 
   return (
@@ -62,6 +74,7 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps<WorkflowNodeDat
           selected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
         )}
         style={{ width: "100%", height: "100%" }}
+        onDoubleClick={onDoubleClick}
       >
         <div
           className="flex items-center gap-1 px-2 py-1.5 border-b border-border/50 bg-muted/40 cursor-pointer"
@@ -97,6 +110,17 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps<WorkflowNodeDat
               aria-label="Add step"
             >
               <Plus className="h-4 w-4" />
+            </button>
+          )}
+          {rawCKP && (
+            <button
+              type="button"
+              onClick={onFocusNode}
+              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+              title="Focus this node (view only this and its substeps)"
+              aria-label="Focus node"
+            >
+              <Focus className="h-4 w-4" />
             </button>
           )}
         </div>

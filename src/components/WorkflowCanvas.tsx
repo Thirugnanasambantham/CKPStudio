@@ -17,7 +17,9 @@ import { StepNode } from "@/components/nodes/StepNode"
 import { OperationNode } from "@/components/nodes/OperationNode"
 import { VerificationNode } from "@/components/nodes/VerificationNode"
 import { ErrorHandlerNode } from "@/components/nodes/ErrorHandlerNode"
+import { BackNode } from "@/components/nodes/BackNode"
 import { FitViewHelper } from "@/components/FitViewHelper"
+import { DRILL_DOWN_BACK_NODE_ID } from "@/stores/workflow-store"
 import { ViewportSync, type FlowTransform } from "@/components/ViewportSync"
 import { NODE_PALETTE_DRAG_TYPE } from "@/components/NodePalette"
 import { useWorkflowStore } from "@/stores/workflow-store"
@@ -34,6 +36,7 @@ const nodeTypes = {
   operationNode: OperationNode,
   verificationNode: VerificationNode,
   errorHandlerNode: ErrorHandlerNode,
+  back: BackNode,
 }
 
 function nextNodeId(type: string): string {
@@ -47,6 +50,8 @@ interface WorkflowCanvasProps {
   onEdgesChange: (changes: EdgeChange[]) => void
   onConnect: (connection: Connection) => void
   onSelectionChange?: (selectedNodeId: string | null) => void
+  /** When true, filter out the drill-down back node from change payloads so it is not persisted. */
+  filterDrillDownBackFromChanges?: boolean
 }
 
 export function WorkflowCanvas({
@@ -56,11 +61,22 @@ export function WorkflowCanvas({
   onEdgesChange,
   onConnect,
   onSelectionChange,
+  filterDrillDownBackFromChanges = false,
 }: WorkflowCanvasProps) {
   const addNode = useWorkflowStore((s) => s.addNode)
   const reorderSteps = useWorkflowStore((s) => s.reorderSteps)
   const rawCKP = useWorkflowStore((s) => s.rawCKP)
   const transformRef = useRef<FlowTransform | null>(null)
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      const toApply = filterDrillDownBackFromChanges
+        ? changes.filter((c) => (c as { id?: string }).id !== DRILL_DOWN_BACK_NODE_ID)
+        : changes
+      onNodesChange(toApply)
+    },
+    [onNodesChange, filterDrillDownBackFromChanges],
+  )
 
   const onNodeDragStop = useCallback(
     (_: React.MouseEvent | React.TouchEvent, draggedNode: Node) => {
@@ -129,7 +145,7 @@ export function WorkflowCanvas({
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
-          onNodesChange={onNodesChange}
+          onNodesChange={handleNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onDragOver={onDragOver}
