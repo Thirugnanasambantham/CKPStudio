@@ -1,0 +1,312 @@
+{
+  "$schema_name": "CKP Syntax Reference (informal)",
+  "$schema_version": "2026-02-09",
+  "$min_orchestrator_version": "1.0.0",
+  "$notes": [
+    "Sample CKP workflow for testing upload and ReactFlow rendering.",
+    "Uses shared JSON format: root (trigger, global_config), node_definition (agent, type, description, sequence.steps, logic, loop, parallel, etc.)."
+  ],
+  "root": {
+    "procedure_id": "sample-test-workflow",
+    "version": "1.0.0",
+    "status": "active",
+    "effective_date": "2026-02-23",
+    "description": "Sample CKP workflow demonstrating shared format with step attributes",
+    "trigger": {
+      "type": "manual",
+      "schedule": null
+    },
+    "retrieval_metadata": {
+      "primary_intents": ["test_workflow", "demo"],
+      "negative_intents": [],
+      "business_domain": "it",
+      "applicability": {
+        "application_names": ["CKP Studio"],
+        "account_types": ["tester"],
+        "channel": ["web", "desktop"]
+      },
+      "keywords": ["sample", "test", "upload"]
+    },
+    "global_config": {
+      "screenshot_on_fail": true,
+      "max_retries": 2,
+      "retry_delay_ms": 1000,
+      "timeout_ms": 30000,
+      "logging_level": "INFO",
+      "telemetry_enabled": true,
+      "checkpoint_strategy": "critical_nodes_only",
+      "execution_mode": "production"
+    },
+    "variables_schema": {
+      "required": {
+        "input_path": {
+          "type": "string",
+          "description": "Path to input file",
+          "origin": "user_strict"
+        }
+      },
+      "optional": {
+        "result": {
+          "type": "object",
+          "origin": "system_captured",
+          "description": "Step output"
+        }
+      }
+    }
+  },
+  "workflow_graph": {
+    "start_node": "start",
+    "nodes": [
+      {
+        "id": "start",
+        "agent": "MasterAgent",
+        "type": "sequence",
+        "description": "Entry: validate input and route",
+        "inputs": { "path": "{{input_path}}" },
+        "next_node": "validate",
+        "is_checkpoint": true,
+        "sla": { "max_duration_ms": 5000, "on_breach": "warn" },
+        "telemetry": { "track_duration": true, "track_retries": true },
+        "sequence": {
+          "steps": [
+            {
+              "step_id": "init",
+              "action": "log",
+              "value": "Workflow started",
+              "output_variable": "start_ts"
+            },
+            {
+              "step_id": "validate_path",
+              "action": "wait",
+              "wait_ms": 100,
+              "timeout_ms": 2000
+            },
+            {
+              "step_id": "click_submit",
+              "action": "click",
+              "target": "#submit-btn",
+              "wait_ms": 500,
+              "timeout_ms": 5000,
+              "retry_on_failure": true,
+              "screenshot_on_complete": false
+            },
+            {
+              "step_id": "read_status",
+              "action": "get_text",
+              "target": "[data-testid='status-label']",
+              "output_variable": "status_text",
+              "timeout_ms": 3000,
+              "wait_after_ms": 200
+            }
+          ]
+        }
+      },
+      {
+        "id": "validate",
+        "agent": "WEB",
+        "type": "verification",
+        "description": "Verify input and decide path",
+        "next_node": "portal_automation",
+        "verification": {
+          "checks": [
+            { "id": "v1", "condition": "input_valid", "on_fail": "fail_workflow", "message": "Invalid input" }
+          ],
+          "next_node": "decide"
+        }
+      },
+      {
+        "id": "portal_automation",
+        "agent": "WEB",
+        "type": "automation",
+        "description": "Login to portal and validate invoice via MCP",
+        "next_node": "decide",
+        "automation": {
+          "steps": [
+            {
+              "step_id": "login_portal",
+              "action": "type",
+              "target": "#username",
+              "value": "{{secrets.portal_credentials.username}}",
+              "wait_after_ms": 500
+            },
+            {
+              "step_id": "enter_password",
+              "action": "type",
+              "target": "#password",
+              "value": "{{secrets.portal_credentials.password}}",
+              "wait_after_ms": 500
+            },
+            {
+              "step_id": "click_login",
+              "action": "click",
+              "target": "button[type='submit']",
+              "wait_after_ms": 2000
+            },
+            {
+              "step_id": "wait_dashboard",
+              "action": "wait_for_element",
+              "target": "#dashboard",
+              "timeout_ms": 10000
+            },
+            {
+              "step_id": "search_invoice",
+              "action": "type",
+              "target": "#invoice-search",
+              "value": "{{current_invoice.invoice_number}}",
+              "wait_after_ms": 1000
+            },
+            {
+              "step_id": "click_search",
+              "action": "click",
+              "target": "#search-btn",
+              "wait_after_ms": 2000
+            },
+            {
+              "step_id": "extract_validation_data",
+              "action": "extract_table_data",
+              "target": "#invoice-details-table",
+              "output_variable": "validation_result",
+              "timeout_ms": 5000
+            },
+            {
+              "step_id": "screenshot_validation",
+              "action": "take_screenshot",
+              "output_variable": "portal_screenshot"
+            }
+          ]
+        }
+      },
+      {
+        "id": "decide",
+        "type": "logic",
+        "description": "Route by approval outcome",
+        "logic": {
+          "rules": [
+            { "condition": "approved", "next_node": "process_approved" },
+            { "condition": "reject", "next_node": "notify_reject" }
+          ],
+          "default_next_node": "notify_reject"
+        }
+      },
+      {
+        "id": "process_approved",
+        "agent": "DESKTOP",
+        "type": "parallel",
+        "description": "Run branches in parallel",
+        "parallel": {
+          "branches": [
+            { "branch_id": "branch_a", "start_node": "branch_a" },
+            { "branch_id": "branch_b", "start_node": "branch_b" }
+          ],
+          "wait_strategy": "all",
+          "branch_failure": "stop",
+          "next_node": "join"
+        }
+      },
+      {
+        "id": "branch_a",
+        "type": "processing",
+        "description": "Branch A task",
+        "processing": {
+          "operations": [
+            { "action": "set_variable", "variable": "branch_a_done", "value": true }
+          ],
+          "next_node": "join"
+        }
+      },
+      {
+        "id": "branch_b",
+        "type": "processing",
+        "description": "Branch B task",
+        "processing": {
+          "operations": [
+            { "action": "set_variable", "variable": "branch_b_done", "value": true }
+          ],
+          "next_node": "join"
+        }
+      },
+      {
+        "id": "join",
+        "type": "sequence",
+        "description": "Join and continue to loop",
+        "next_node": "loop_start",
+        "sequence": {
+          "steps": [
+            { "step_id": "join_log", "action": "log", "value": "Branches joined" }
+          ]
+        }
+      },
+      {
+        "id": "loop_start",
+        "type": "loop",
+        "description": "Loop over items",
+        "loop": {
+          "iterator": "items",
+          "iterator_variable": "current_record",
+          "index_variable": "index",
+          "body_node": "loop_body",
+          "max_iterations": 100,
+          "continue_on_error": false,
+          "next_node": "end"
+        }
+      },
+      {
+        "id": "loop_body",
+        "type": "sequence",
+        "description": "Body of loop: click and get_text per record",
+        "next_node": "end",
+        "sequence": {
+          "steps": [
+            {
+              "step_id": "process_record",
+              "action": "set_variable",
+              "value": "{{current_record}}",
+              "output_variable": "processed"
+            },
+            {
+              "step_id": "click_row",
+              "action": "click",
+              "target": "table tr[data-index='{{index}}'] td.select",
+              "wait_ms": 100,
+              "timeout_ms": 2000
+            },
+            {
+              "step_id": "get_cell_text",
+              "action": "get_text",
+              "target": "table tr[data-index='{{index}}'] .cell-value",
+              "output_variable": "cell_text",
+              "wait_after_ms": 50
+            }
+          ]
+        }
+      },
+      {
+        "id": "notify_reject",
+        "agent": "EMAIL",
+        "type": "processing",
+        "description": "Notify on reject",
+        "next_node": "end",
+        "processing": {
+          "operations": [
+            { "action": "notify", "channel": "log", "message": "Request rejected" }
+          ],
+          "next_node": "end"
+        }
+      },
+      {
+        "id": "end",
+        "type": "terminate",
+        "description": "End workflow",
+        "terminate": {
+          "status": "success",
+          "outputs": { "result": "{{result}}" }
+        }
+      }
+    ]
+  },
+  "provenance": {
+    "compiled_on": "2026-02-23T00:00:00Z",
+    "compiler_agent_version": "1.0.0",
+    "human_reviewer": "tester"
+  }
+}
